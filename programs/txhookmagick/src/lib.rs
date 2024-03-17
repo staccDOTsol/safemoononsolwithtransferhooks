@@ -2,22 +2,20 @@ use anchor_lang::{
     prelude::*,
     system_program::{create_account, CreateAccount},
 };
+use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 use cp_swap::states::{AmmConfig, PoolState};
-use spl_tlv_account_resolution::seeds::Seed;
 use spl_tlv_account_resolution::account::ExtraAccountMeta;
-use anchor_spl::{
-   token_interface::{Mint, TokenAccount, TokenInterface}
-};
-use spl_tlv_account_resolution::{
-    state::ExtraAccountMetaList,
-};
+use spl_tlv_account_resolution::seeds::Seed;
+use spl_tlv_account_resolution::state::ExtraAccountMetaList;
 use spl_transfer_hook_interface::instruction::{ExecuteInstruction, TransferHookInstruction};
 
-declare_id!("DrWbQtYJGtsoRwzKqAbHKHKsCJJfpysudF39GBVFSxub");
+declare_id!("Be5RqJmjikExQF52v38jBs7didwmKvxzX688yMXnoQqG");
 
 #[program]
 pub mod transfer_hook {
-    use anchor_lang::solana_program::{instruction::Instruction, program::invoke_signed};
+    use anchor_lang::solana_program::{
+        instruction::Instruction, program::invoke_signed, program_pack::Pack,
+    };
 
     use super::*;
 
@@ -39,134 +37,145 @@ pub mod transfer_hook {
             &[],
             burn_amount,
         )?;
-        
-        let seeds: &[&[u8]] = &[b"delegate",
-            &[ctx.bumps.delegate],
-        ];
 
-        invoke_signed(&burn_ix, &[
-            ctx.accounts.source_token.to_account_info(),
-            ctx.accounts.mint.to_account_info(),
-            ctx.accounts.owner.to_account_info(),
-            ctx.accounts.token_program_2022.to_account_info(),
-        ], &[&seeds])?;
-        
-        
+        let seeds: &[&[u8]] = &[b"delegate", &[ctx.bumps.delegate]];
+
         invoke_signed(
-            &Instruction {
-                program_id: cp_swap::id(),
-                accounts: vec![
-                    AccountMeta::new(ctx.accounts.delegate.key(), true),
-                    //authority
-                    AccountMeta::new(ctx.accounts.authority.key(), false),
-                    // amm_config
-                    
-                    AccountMeta::new(ctx.accounts.amm_config.key(), false),
-                    // pool_state
-                    AccountMeta::new(ctx.accounts.pool_state.key(), false),
-                    //input_token_account
-                    AccountMeta::new(ctx.accounts.token_0_account.key(), false),
-                    //output_token_account
-                    AccountMeta::new(ctx.accounts.token_1_account.key(), false),
-                    //input_token_vault
-                    AccountMeta::new(ctx.accounts.token_0_vault.key(), false),
-                    //output_token_vault
-                    AccountMeta::new(ctx.accounts.token_1_vault.key(), false),
-                    //input_token_program
-                    AccountMeta::new(ctx.accounts.token_program_2022.key(), false),
-                    //output_token_program
-                    AccountMeta::new(ctx.accounts.token_program.key(), false),
-                    //input_mint
-                    AccountMeta::new(ctx.accounts.mint.key(), false),
-                    //output_mint
-                    AccountMeta::new(ctx.accounts.vault_1_mint.key(), false),
-
-                ],
-                data: cp_swap::instruction::SwapBaseInput {
-                    amount_in: sol_amount,
-                    minimum_amount_out: 0
-                }
-                .try_to_vec()?,
-
-            },
+            &burn_ix,
             &[
-                ctx.accounts.delegate.to_account_info(),
-                ctx.accounts.authority.to_account_info(),
-                ctx.accounts.amm_config.to_account_info(),
-                ctx.accounts.pool_state.to_account_info(),
-                ctx.accounts.token_0_account.to_account_info(),
-                ctx.accounts.token_1_account.to_account_info(),
-                ctx.accounts.token_0_vault.to_account_info(),
-                ctx.accounts.token_1_vault.to_account_info(),
-                ctx.accounts.token_program.to_account_info(),
-                ctx.accounts.token_program_2022.to_account_info(),
+                ctx.accounts.source_token.to_account_info(),
                 ctx.accounts.mint.to_account_info(),
-                ctx.accounts.vault_1_mint.to_account_info(),
-                
+                ctx.accounts.owner.to_account_info(),
+                ctx.accounts.token_program_2022.to_account_info(),
             ],
             &[&seeds],
         )?;
 
-        // deposit_ix
+        // swap_ix
 
         invoke_signed(
             &Instruction {
-                program_id: cp_swap::id(),
+                program_id: ctx.accounts.cp_swap.key(),
                 accounts: vec![
-                    AccountMeta::new(ctx.accounts.delegate.key(), true),
-                    //authority
-                    AccountMeta::new(ctx.accounts.authority.key(), false),
                     // pool_state
-                    AccountMeta::new(ctx.accounts.pool_state.key(), false),
+                    AccountMeta::new_readonly(ctx.accounts.pool_state.key(), false),
+                    //authority
+                    AccountMeta::new_readonly(ctx.accounts.authority.key(), false),
+                    AccountMeta::new_readonly(ctx.accounts.delegate.key(), true),
                     //lp_token
-                    AccountMeta::new(ctx.accounts.owner_lp_token.key(), false),
                     //input_token_account
                     AccountMeta::new(ctx.accounts.token_0_account.key(), false),
-                    //output_token_account
-                    AccountMeta::new(ctx.accounts.token_1_account.key(), false),
                     //input_token_vault
                     AccountMeta::new(ctx.accounts.token_0_vault.key(), false),
                     //output_token_vault
                     AccountMeta::new(ctx.accounts.token_1_vault.key(), false),
-                    //input_token_program
-                    AccountMeta::new(ctx.accounts.token_program.key(), false),
-                    //output_token_program
-                    AccountMeta::new(ctx.accounts.token_program_2022.key(), false),
+                    //output_token_account
+                    AccountMeta::new(ctx.accounts.token_1_account.key(), false),
+                    //lp_mint
+                    AccountMeta::new(ctx.accounts.lp_mint.key(), false),
+                    //fee_account
+                    AccountMeta::new(ctx.accounts.fee_account.key(), false),
                     //input_mint
                     AccountMeta::new(ctx.accounts.mint.key(), false),
                     //output_mint
                     AccountMeta::new(ctx.accounts.vault_1_mint.key(), false),
+                    //input_token_program
+                    AccountMeta::new(ctx.accounts.token_program.key(), false),
+                    //output_token_program
+                    AccountMeta::new(ctx.accounts.token_program_2022.key(), false),
                     //lp_mint
-                    AccountMeta::new(ctx.accounts.lp_mint.key(), false),
-
+                    AccountMeta::new(ctx.accounts.token_program.key(), false),
                 ],
                 data: cp_swap::instruction::SwapBaseInput {
                     amount_in: deposit_amount,
-                    minimum_amount_out: 0
-                }
-                .try_to_vec()?,
-
+                    minimum_amount_out: 0,
+                }.try_to_vec()?,
             },
             &[
-                ctx.accounts.delegate.to_account_info(),
-                ctx.accounts.authority.to_account_info(),
+                ctx.accounts.cp_swap.to_account_info(),
                 ctx.accounts.pool_state.to_account_info(),
-                ctx.accounts.owner_lp_token.to_account_info(),
+                ctx.accounts.authority.to_account_info(),
+                ctx.accounts.delegate.to_account_info(),
                 ctx.accounts.token_0_account.to_account_info(),
-                ctx.accounts.token_1_account.to_account_info(),
                 ctx.accounts.token_0_vault.to_account_info(),
                 ctx.accounts.token_1_vault.to_account_info(),
-                ctx.accounts.token_program.to_account_info(),
-                ctx.accounts.token_program_2022.to_account_info(),
+                ctx.accounts.token_1_account.to_account_info(),
+                ctx.accounts.lp_mint.to_account_info(),
+                ctx.accounts.fee_account.to_account_info(),
                 ctx.accounts.mint.to_account_info(),
                 ctx.accounts.vault_1_mint.to_account_info(),
-                ctx.accounts.lp_mint.to_account_info(),
-                
+                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program_2022.to_account_info(),
             ],
             &[&seeds],
         )?;
 
+        let decoded_lp_token = spl_token_2022::state::Mint::unpack(
+            &ctx.accounts.lp_mint.to_account_info().data.borrow(),
+        )?;
+        let pool_sup = decoded_lp_token.supply;
+        let pool_token_a = ctx.accounts.token_0_account.amount;
+        let token_a_in = amount;
+        let lp_token_amount = token_a_in * pool_sup / pool_token_a;
 
+        invoke_signed(
+            &Instruction {
+                program_id: ctx.accounts.cp_swap.key(),
+                accounts: vec![
+                    // pool_state
+                    AccountMeta::new_readonly(ctx.accounts.pool_state.key(), false),
+                    //authority
+                    AccountMeta::new_readonly(ctx.accounts.authority.key(), false),
+                    AccountMeta::new_readonly(ctx.accounts.delegate.key(), true),
+                    //lp_token
+                    //input_token_account
+                    AccountMeta::new(ctx.accounts.token_0_account.key(), false),
+                    //output_token_account
+                    AccountMeta::new(ctx.accounts.token_1_account.key(), false),
+                    //input_token_vault
+                    AccountMeta::new(ctx.accounts.token_0_vault.key(), false),
+                    //output_token_vault
+                    AccountMeta::new(ctx.accounts.token_1_vault.key(), false),
+                    //lp_mint
+                    AccountMeta::new(ctx.accounts.lp_mint.key(), false),
+                    // lp_mint_account
+                    AccountMeta::new(ctx.accounts.owner_lp_token.key(), false),
+                    //input_mint
+                    AccountMeta::new_readonly(ctx.accounts.mint.key(), false),
+                    //output_mint
+                    AccountMeta::new_readonly(ctx.accounts.vault_1_mint.key(), false),
+                    //input_token_program
+                    AccountMeta::new_readonly(ctx.accounts.token_program.key(), false),
+                    //output_token_program
+                    AccountMeta::new_readonly(ctx.accounts.token_program_2022.key(), false),
+                    //lp_mint
+                    AccountMeta::new_readonly(ctx.accounts.token_program.key(), false),
+                ],
+                data: cp_swap::instruction::Deposit {
+                    lp_token_amount,
+                    maximum_token_1_amount: u64::MAX,
+                    maximum_token_0_amount: u64::MAX,
+                }.try_to_vec()?,
+            },
+            &[
+                ctx.accounts.cp_swap.to_account_info(),
+                ctx.accounts.pool_state.to_account_info(),
+                ctx.accounts.authority.to_account_info(),
+                ctx.accounts.delegate.to_account_info(),
+                ctx.accounts.token_0_account.to_account_info(),
+                ctx.accounts.token_1_account.to_account_info(),
+                ctx.accounts.token_0_vault.to_account_info(),
+                ctx.accounts.token_1_vault.to_account_info(),
+                ctx.accounts.lp_mint.to_account_info(),
+                ctx.accounts.owner_lp_token.to_account_info(),
+                ctx.accounts.mint.to_account_info(),
+                ctx.accounts.vault_1_mint.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
+                ctx.accounts.token_program_2022.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
+            ],
+            &[&seeds],
+        )?;
 
         msg!("Hello Transfer Hook!");
         Ok(())
@@ -180,7 +189,7 @@ pub mod transfer_hook {
     ) -> Result<()> {
         let instruction = TransferHookInstruction::unpack(data)?;
 
-        // match instruction discriminator to transfer hook interface execute instruction  
+        // match instruction discriminator to transfer hook interface execute instruction
         // token2022 program CPIs this instruction on token transfer
         match instruction {
             TransferHookInstruction::Execute { amount } => {
@@ -205,11 +214,9 @@ pub mod transfer_hook {
                     bytes: "delegate".as_bytes().to_vec(),
                 }],
                 false, // is_signer
-                false,  // is_writable
+                false, // is_writable
             )?,
             ExtraAccountMeta::new_with_pubkey(&ctx.accounts.token_program_2022.key(), false, true)?,
-            // amm_config, pool_state, owner_lp_token, token_0_account, token_1_account, token_0_vault, token_1_vault
-            ExtraAccountMeta::new_with_pubkey(&ctx.accounts.amm_config.key(), false, true)?,
             ExtraAccountMeta::new_with_pubkey(&ctx.accounts.pool_state.key(), false, true)?,
             ExtraAccountMeta::new_with_pubkey(&ctx.accounts.owner_lp_token.key(), false, true)?,
             ExtraAccountMeta::new_with_pubkey(&ctx.accounts.token_0_account.key(), false, true)?,
@@ -223,7 +230,10 @@ pub mod transfer_hook {
             ExtraAccountMeta::new_with_pubkey(&ctx.accounts.system_program.key(), false, true)?,
             // authority
             ExtraAccountMeta::new_with_pubkey(&ctx.accounts.authority.key(), true, false)?,
-            
+            // cp_swap
+            ExtraAccountMeta::new_with_pubkey(&ctx.accounts.cp_swap.key(), false, true)?,
+            // fee_account
+            ExtraAccountMeta::new_with_pubkey(&ctx.accounts.fee_account.key(), false, true)?,
         ];
 
         // calculate account size
@@ -246,8 +256,7 @@ pub mod transfer_hook {
                     from: ctx.accounts.payer.to_account_info(),
                     to: ctx.accounts.extra_account_meta_list.to_account_info(),
                 },
-            )
-            .with_signer(signer_seeds),
+            ).with_signer(signer_seeds),
             lamports,
             account_size,
             ctx.program_id,
@@ -286,18 +295,7 @@ pub struct InitializeExtraAccountMetaList<'info> {
     #[account(address = token_1_vault.mint)]
     vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
 
-    #[account(
-        mut,
-        seeds = [b"delegate"],
-        bump
-    )]
-    pub delegate: SystemAccount<'info>,
-
     token_program_2022: Interface<'info, TokenInterface>,
-
-    #[account(address = pool_state.load()?.amm_config)]
-    amm_config: Box<Account<'info, AmmConfig>>,
-
     #[account(mut)]
     pool_state: AccountLoader<'info, PoolState>,
 
@@ -324,8 +322,12 @@ pub struct InitializeExtraAccountMetaList<'info> {
     system_program: Program<'info, System>,
     /// CHECK:no
     authority: AccountInfo<'info>,
+    /// CHECK:no
+    cp_swap: AccountInfo<'info>,
+    /// fee_account
+    #[account(mut)]
+    fee_account: Box<InterfaceAccount<'info, TokenAccount>>,
 }
-
 
 #[derive(Accounts)]
 pub struct TransferHook<'info> {
@@ -347,7 +349,6 @@ pub struct TransferHook<'info> {
         bump
     )]
     pub extra_account_meta_list: UncheckedAccount<'info>,
-    
 
     #[account(address = token_1_vault.mint)]
     vault_1_mint: Box<InterfaceAccount<'info, Mint>>,
@@ -361,8 +362,6 @@ pub struct TransferHook<'info> {
 
     token_program_2022: Interface<'info, TokenInterface>,
 
-    #[account(address = pool_state.load()?.amm_config)]
-    amm_config: Box<Account<'info, AmmConfig>>,
 
     #[account(mut)]
     pool_state: AccountLoader<'info, PoolState>,
@@ -390,5 +389,9 @@ pub struct TransferHook<'info> {
     system_program: Program<'info, System>,
     /// CHECK:no
     authority: AccountInfo<'info>,
-
+    /// CHECK:no
+    cp_swap: AccountInfo<'info>,
+    /// fee_account
+    #[account(mut)]
+    fee_account: Box<InterfaceAccount<'info, TokenAccount>>,
 }
